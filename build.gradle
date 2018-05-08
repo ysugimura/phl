@@ -1,0 +1,113 @@
+apply plugin: 'java'
+apply plugin: 'maven-publish'
+apply plugin: 'eclipse'
+
+
+// 全ソースがUTF-8であることを指定する
+tasks.withType(JavaCompile) {
+  options.encoding = 'UTF-8'
+}
+
+// Javaソースのバージョン
+sourceCompatibility = 1.8
+
+// 生成クラスのバージョン
+targetCompatibility = 1.8
+
+// 依存を取得する場合のリポジトリ
+repositories {
+  maven { url CENTRAL_REPOSITORY }
+}
+
+// 公開設定
+task sourceJar(type: Jar) {
+  from sourceSets.main.allJava
+  classifier "sources"
+}
+
+publishing {
+  publications {
+    target(MavenPublication) {
+      groupId  'com.cm55'
+      artifactId 'phl'
+      version '1.0.0'    
+      from components.java   
+      artifact sourceJar
+    }
+  }  
+  repositories {
+    maven {
+      url GITHUB_MAVEN            
+    }
+  }
+}
+
+
+/* ソースセットの指定 */
+sourceSets {
+  main {
+    java {
+      srcDir 'src'; exclude '**/*Test.java'
+    }
+    resources {
+      srcDir 'src'; exclude '**/*Test.java'
+    }
+  }
+
+}
+
+// このプロジェクトの依存ライブラリの指定
+dependencies {    
+
+  testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+
+/* sourceSetsで同じフォルダを複数回指定すると、ご丁寧にもその分だけ
+ * classPathに入れてしまう。重複した分を削除する
+ */
+def removeDuplicatedSources = { cp->
+  def newList = new ArrayList()
+  def duplicated = new HashSet()
+  cp.entries.each { e-> 
+    if (e.kind != 'src') {
+      newList.add(e);
+      return
+    }
+    if (duplicated.contains(e.path))
+      return;
+    newList.add(e);
+    duplicated.add(e.path);          
+  }
+  cp.entries = newList;
+}
+
+// srcDir 'src'; exclude '**/*Test.java';のexcludeを削除する。
+// IDE上ではテストユニットが見えていて欲しい
+def removeAllExcludes = { cp->
+  cp.entries.findAll{ it.kind == 'src' }.each{
+    it.setExcludes(new ArrayList())  
+  }
+}
+
+/* 勝手に指定されたoutputを削除する。
+ * これがあると、勝手にAllow output folders for source foldersがONになってしまう。
+ */
+def removeOutputFoldersForSourceFolders = { cp->
+  cp.entries.findAll{ it.kind == 'src' }.each{
+    it.output = null
+  }
+}
+
+eclipse {
+  classpath {
+    downloadSources=true
+    file  {
+      whenMerged {cp->
+        removeDuplicatedSources(cp)
+        removeOutputFoldersForSourceFolders(cp)
+        removeAllExcludes(cp)
+      }
+    }    
+  }     
+}
